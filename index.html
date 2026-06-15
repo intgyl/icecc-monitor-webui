@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Icecc Monitor</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2338bdf8%22%20stroke-width%3D%222.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%226%22%20r%3D%221%22/%3E%3Cpath%20d%3D%22M6%2014a2%202%200%200%201-2-2V4a2%202%200%200%201%202-2h12a2%202%200%200%201%202%202v8a2%202%200%200%201-2%202%22/%3E%3Cpath%20d%3D%22M12%2022v-4%22/%3E%3Cpath%20d%3D%22M12%2012a4%204%200%200%200%204-4V5H8v3a4%204%200%200%200%204%204Z%22/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0a0d16;
+      --bg-panel: rgba(16, 22, 37, 0.7);
+      --bg-card: rgba(22, 30, 49, 0.85);
+      --bg-hover: rgba(30, 41, 69, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(255, 255, 255, 0.16);
+      --primary: #38bdf8;
+      --primary-glow: rgba(56, 189, 248, 0.3);
+      --primary-hover: #0ea5e9;
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.3);
+      --success-hover: #059669;
+      --danger: #f43f5e;
+      --danger-glow: rgba(244, 63, 94, 0.3);
+      --danger-hover: #e11d48;
+      --warning: #f59e0b;
+      --warning-glow: rgba(245, 158, 11, 0.3);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dark: #64748b;
+      --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+      --transition-fast: 0.15s ease;
+      --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      height: 100vh;
+      overflow: hidden;
+      background-image:
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.07) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.07) 0px, transparent 50%);
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+
+    .app-container {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      height: 100vh;
+      padding: 16px;
+      gap: 16px;
+      max-width: 1920px;
+      margin: 0 auto;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      height: 100%;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 4px 4px 4px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      padding: 8px;
+      border-radius: var(--radius-md);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .brand h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: var(--primary);
+      text-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+    }
+
+    .brand .version {
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--text-dark);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 6px;
+      border-radius: 20px;
+      margin-left: auto;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+      display: flex;
+      flex-direction: column;
+      transition: border-color var(--transition-normal);
+    }
+
+    .panel:hover { border-color: var(--border-hover); }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: var(--text-main);
+    }
+
+    .panel-header .icon {
+      width: 18px;
+      height: 18px;
+      margin-right: 8px;
+      color: var(--primary);
+    }
+
+    .panel-header span { display: flex; align-items: center; }
+
+    .panel-body { padding: 18px; }
+
+    .form-group {
+      margin-bottom: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .select-wrapper {
+      position: relative;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      transition: border-color var(--transition-fast);
+    }
+
+    .select-wrapper:hover, .select-wrapper:focus-within { border-color: var(--primary); }
+
+    .select-wrapper select {
+      width: 100%;
+      appearance: none;
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      padding: 10px 32px 10px 12px;
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .select-wrapper::after {
+      content: '';
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 5px solid var(--text-muted);
+      pointer-events: none;
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 20px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25);
+    }
+
+    .topbar h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-right: auto;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .status-pill.connected {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border-color: rgba(16, 185, 129, 0.3);
+      box-shadow: 0 0 10px var(--success-glow);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 6px currentColor;
+    }
+
+    .view-tabs {
+      display: flex;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 4px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+    }
+
+    .view-tab {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .view-tab:hover { color: var(--text-main); background: rgba(255, 255, 255, 0.05); }
+    .view-tab.active { color: var(--text-main); background: var(--bg-card); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      transition: transform var(--transition-fast), border-color var(--transition-fast);
+    }
+
+    .metric-card:hover { transform: translateY(-2px); border-color: var(--border-hover); }
+
+    .metric-card h3 {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+
+    .metric-card .value {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .metric-card .value.primary { color: var(--primary); text-shadow: 0 0 12px var(--primary-glow); }
+    .metric-card .value.success { color: var(--success); text-shadow: 0 0 12px var(--success-glow); }
+    .metric-card .value.danger { color: var(--danger); text-shadow: 0 0 12px var(--danger-glow); }
+
+    .panel-table {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border-color); }
+    th {
+      background: rgba(0, 0, 0, 0.2);
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    tr:hover td { background: var(--bg-hover); }
+    tr.clickable { cursor: pointer; }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge.online { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge.stale { background: rgba(244, 63, 94, 0.15); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.3); }
+    .badge.pending { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge.local { background: rgba(56, 189, 248, 0.15); color: var(--primary); border: 1px solid rgba(56, 189, 248, 0.3); }
+    .badge.compiling { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+
+    .load-bar {
+      display: inline-block;
+      width: 80px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    .load-bar > span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--success));
+      border-radius: 3px;
+      box-shadow: 0 0 8px var(--primary-glow);
+    }
+
+    .empty-state {
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .empty-state h3 { font-size: 1.2rem; margin-bottom: 8px; color: var(--text-main); }
+
+    .gantt-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.85rem;
+    }
+
+    .gantt-row:hover { background: var(--bg-hover); }
+    .gantt-label { width: 120px; color: var(--text-muted); flex-shrink: 0; }
+    .gantt-track { flex: 1; height: 24px; background: rgba(0, 0, 0, 0.2); border-radius: var(--radius-sm); position: relative; overflow: hidden; }
+    .gantt-bar { position: absolute; height: 100%; border-radius: var(--radius-sm); background: linear-gradient(90deg, var(--primary), var(--success)); box-shadow: 0 0 8px var(--primary-glow); }
+
+    .host-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .detail-item {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 14px;
+    }
+
+    .detail-item .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .detail-item .value { font-size: 1rem; color: var(--text-main); font-weight: 500; word-break: break-word; }
+
+    .back-btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      font-family: var(--font-sans);
+      font-size: 0.85rem;
+    }
+
+    .back-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 900px) {
+      .app-container { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+      .sidebar { height: auto; max-height: 40vh; }
+      .topbar { flex-wrap: wrap; }
+      .view-tabs { order: 3; width: 100%; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="6" r="1"/>
+            <path d="M6 14a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2"/>
+            <path d="M12 22v-4"/>
+            <path d="M12 12a4 4 0 0 0 4-4V5H8v3a4 4 0 0 0 4 4Z"/>
+          </svg>
+        </div>
+        <h1>Icecc Monitor</h1>
+        <span class="version">v1.1</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            设置
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="form-group">
+            <label>自动刷新频率</label>
+            <div class="select-wrapper">
+              <select id="refresh-rate">
+                <option value="0.5">0.5 秒</option>
+                <option value="1" selected>1 秒</option>
+                <option value="2">2 秒</option>
+                <option value="5">5 秒</option>
+                <option value="10">10 秒</option>
+                <option value="30">30 秒</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>当前状态</label>
+            <span id="sidebar-status" class="status-pill"><span class="status-dot"></span>连接中…</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            视图模式
+          </span>
+        </div>
+        <div class="panel-body">
+          <div class="view-tabs" style="flex-direction: column; align-items: stretch;">
+            <button class="view-tab active" data-view="summary">摘要视图</button>
+            <button class="view-tab" data-view="nodes">节点列表</button>
+            <button class="view-tab" data-view="jobs">任务视图</button>
+            <button class="view-tab" data-view="gantt">甘特视图</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h2 id="view-title">摘要视图</h2>
+        <div class="view-tabs" id="topbar-tabs">
+          <button class="view-tab active" data-view="summary">摘要</button>
+          <button class="view-tab" data-view="nodes">节点</button>
+          <button class="view-tab" data-view="jobs">任务</button>
+          <button class="view-tab" data-view="gantt">甘特</button>
+        </div>
+        <span id="topbar-status" class="status-pill"><span class="status-dot"></span>连接中…</span>
+      </div>
+
+      <div class="content">
+        <!-- Summary View -->
+        <div id="view-summary" class="view active">
+          <div class="summary-grid">
+            <div class="metric-card">
+              <h3>在线节点</h3>
+              <div class="value primary" id="summary-nodes">0</div>
+            </div>
+            <div class="metric-card">
+              <h3>活跃任务</h3>
+              <div class="value success" id="summary-jobs">0</div>
+            </div>
+            <div class="metric-card">
+              <h3>已完成任务</h3>
+              <div class="value" id="summary-completed">0</div>
+            </div>
+            <div class="metric-card">
+              <h3>总负载</h3>
+              <div class="value danger" id="summary-load">0%</div>
+            </div>
+          </div>
+          <div class="panel-table">
+            <table>
+              <thead>
+                <tr><th>节点</th><th>平台</th><th>负载</th><th>速度</th><th>最大任务</th></tr>
+              </thead>
+              <tbody id="summary-nodes-body">
+                <tr><td colspan="5" class="empty-state">等待数据…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Nodes View -->
+        <div id="view-nodes" class="view">
+          <div class="panel-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>状态</th>
+                  <th>名称</th>
+                  <th>IP</th>
+                  <th>平台</th>
+                  <th>版本</th>
+                  <th>最大任务</th>
+                  <th>负载</th>
+                  <th>速度</th>
+                  <th>特性</th>
+                </tr>
+              </thead>
+              <tbody id="nodes-body">
+                <tr><td colspan="9" class="empty-state">等待数据…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Jobs View -->
+        <div id="view-jobs" class="view">
+          <div class="panel-table">
+            <table>
+              <thead>
+                <tr><th>ID</th><th>文件</th><th>状态</th><th>客户端</th><th>服务端</th><th>开始时间</th></tr>
+              </thead>
+              <tbody id="jobs-body">
+                <tr><td colspan="6" class="empty-state">暂无活跃任务</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Gantt View -->
+        <div id="view-gantt" class="view">
+          <div class="panel-table">
+            <div id="gantt-body">
+              <div class="empty-state"><h3>暂无任务时间线</h3><p>当有编译任务时，此处将显示甘特图</p></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Host Detail View -->
+        <div id="view-host" class="view">
+          <div class="panel">
+            <div class="panel-header">
+              <span id="host-detail-title">节点详情</span>
+              <button class="back-btn" id="host-detail-back">返回节点列表</button>
+            </div>
+            <div class="panel-body">
+              <div class="host-detail-grid" id="host-detail-grid">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let currentView = 'summary';
+    let selectedHostId = null;
+    let lastData = null;
+    let lastRender = 0;
+    let renderPending = false;
+    let refreshIntervalMs = 1000;
+
+    const els = {
+      status: [document.getElementById('topbar-status'), document.getElementById('sidebar-status')],
+      viewTitle: document.getElementById('view-title'),
+      refreshSelect: document.getElementById('refresh-rate'),
+      summaryNodes: document.getElementById('summary-nodes'),
+      summaryJobs: document.getElementById('summary-jobs'),
+      summaryCompleted: document.getElementById('summary-completed'),
+      summaryLoad: document.getElementById('summary-load'),
+      summaryNodesBody: document.getElementById('summary-nodes-body'),
+      nodesBody: document.getElementById('nodes-body'),
+      jobsBody: document.getElementById('jobs-body'),
+      ganttBody: document.getElementById('gantt-body'),
+      hostDetailTitle: document.getElementById('host-detail-title'),
+      hostDetailGrid: document.getElementById('host-detail-grid'),
+      hostDetailBack: document.getElementById('host-detail-back'),
+    };
+
+    function fmtBytes(b) {
+      if (!b) return '-';
+      const units = ['B','KiB','MiB','GiB'];
+      let i = 0;
+      while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
+      return `${b.toFixed(1)} ${units[i]}`;
+    }
+
+    function fmtTime(ts) {
+      if (!ts) return '-';
+      const d = new Date(ts * 1000);
+      return d.toLocaleTimeString();
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function setStatus(connected, text) {
+      els.status.forEach(el => {
+        el.classList.toggle('connected', connected);
+        el.innerHTML = `<span class="status-dot"></span>${escapeHtml(text)}`;
+      });
+    }
+
+    function switchView(view, hostId = null) {
+      currentView = view;
+      selectedHostId = hostId;
+      document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+      document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + view));
+
+      const titles = {
+        summary: '摘要视图',
+        nodes: '节点列表',
+        jobs: '任务视图',
+        gantt: '甘特视图',
+        host: '节点详情'
+      };
+      els.viewTitle.textContent = titles[view] || view;
+
+      if (lastData) render(lastData);
+    }
+
+    document.querySelectorAll('.view-tab').forEach(tab => {
+      tab.addEventListener('click', () => switchView(tab.dataset.view));
+    });
+
+    els.hostDetailBack.addEventListener('click', () => switchView('nodes'));
+
+    els.refreshSelect.addEventListener('change', async () => {
+      refreshIntervalMs = parseFloat(els.refreshSelect.value) * 1000;
+      try {
+        await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_interval: parseFloat(els.refreshSelect.value) })
+        });
+      } catch (e) {
+        console.warn('Failed to update server refresh interval', e);
+      }
+    });
+
+    function render(data) {
+      lastData = data;
+      const nodes = Object.values(data.nodes);
+      const jobs = Object.values(data.jobs);
+      const now = Date.now();
+
+      // Summary metrics: total job-slot utilization (matching icecream-sundae).
+      els.summaryNodes.textContent = data.stats.node_count;
+      els.summaryJobs.textContent = data.stats.active_jobs;
+      els.summaryCompleted.textContent = data.stats.completed_jobs;
+      const totalCurrent = nodes.reduce((sum, n) => sum + (n.current_jobs || 0), 0);
+      const totalMax = nodes.reduce((sum, n) => sum + (n.max_jobs || 0), 0) || 1;
+      const totalLoadPct = Math.min(100, (totalCurrent / totalMax) * 100);
+      els.summaryLoad.textContent = `${totalLoadPct.toFixed(1)}%`;
+
+      // Summary nodes table
+      if (nodes.length === 0) {
+        els.summaryNodesBody.innerHTML = '<tr><td colspan="5" class="empty-state">等待数据…</td></tr>';
+      } else {
+        els.summaryNodesBody.innerHTML = nodes.map(n => {
+          const maxJobs = n.max_jobs || 0;
+          const currentJobs = n.current_jobs || 0;
+          const loadPct = maxJobs > 0 ? Math.min(100, Math.max(0, (currentJobs / maxJobs) * 100)) : 0;
+          return `<tr class="clickable" data-hostid="${n.id}">
+            <td>${escapeHtml(n.name || '?')}</td>
+            <td>${escapeHtml(n.platform || '?')}</td>
+            <td><div class="load-bar"><span style="width:${loadPct}%"></span></div>${currentJobs}/${maxJobs}</td>
+            <td>${n.speed ? n.speed.toFixed(0) : '-'}</td>
+            <td>${maxJobs || '-'}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // Nodes view
+      if (nodes.length === 0) {
+        els.nodesBody.innerHTML = '<tr><td colspan="9" class="empty-state">等待数据…</td></tr>';
+      } else {
+        els.nodesBody.innerHTML = nodes.map(n => {
+          const stale = (now / 1000 - n.last_seen) > 60;
+          const maxJobs = n.max_jobs || 0;
+          const currentJobs = n.current_jobs || 0;
+          const loadPct = maxJobs > 0 ? Math.min(100, Math.max(0, (currentJobs / maxJobs) * 100)) : 0;
+          return `<tr class="clickable" data-hostid="${n.id}">
+            <td><span class="badge ${stale ? 'stale' : 'online'}">${stale ? '离线' : '在线'}</span></td>
+            <td>${escapeHtml(n.name || '?')}</td>
+            <td>${escapeHtml(n.ip || '?')}</td>
+            <td>${escapeHtml(n.platform || '?')}</td>
+            <td>${n.version || '-'}</td>
+            <td>${maxJobs || '-'}</td>
+            <td><div class="load-bar"><span style="width:${loadPct}%"></span></div>${currentJobs}/${maxJobs}</td>
+            <td>${n.speed ? n.speed.toFixed(0) : '-'}</td>
+            <td>${escapeHtml(n.features || '-')}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // Jobs view
+      if (jobs.length === 0) {
+        els.jobsBody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无活跃任务</td></tr>';
+      } else {
+        els.jobsBody.innerHTML = jobs.map(j => `<tr>
+          <td>${j.id}</td>
+          <td>${escapeHtml(j.filename || '?')}</td>
+          <td><span class="badge ${j.state}">${j.state}</span></td>
+          <td>${j.client_id || j.hostid || '?'}</td>
+          <td>${j.server_id || '-'}</td>
+          <td>${fmtTime(j.stime)}</td>
+        </tr>`).join('');
+      }
+
+      // Gantt view
+      if (jobs.length === 0) {
+        els.ganttBody.innerHTML = '<div class="empty-state"><h3>暂无任务时间线</h3><p>当有编译任务时，此处将显示甘特图</p></div>';
+      } else {
+        const minTime = Math.min(...jobs.map(j => j.stime || now / 1000));
+        const maxTime = Math.max(...jobs.map(j => (j.stime || now / 1000)), now / 1000);
+        const range = Math.max(1, maxTime - minTime);
+        els.ganttBody.innerHTML = jobs.map(j => {
+          const start = ((j.stime || minTime) - minTime) / range * 100;
+          const width = Math.max(1, (now / 1000 - (j.stime || minTime)) / range * 100);
+          return `<div class="gantt-row">
+            <div class="gantt-label">#${j.id}</div>
+            <div class="gantt-track">
+              <div class="gantt-bar" style="left:${start}%; width:${Math.min(100 - start, width)}%;"></div>
+            </div>
+            <div style="width:80px; color:var(--text-muted); font-size:0.8rem;">${escapeHtml(j.state)}</div>
+          </div>`;
+        }).join('');
+      }
+
+      // Host detail view
+      if (currentView === 'host' && selectedHostId && data.nodes[selectedHostId]) {
+        const n = data.nodes[selectedHostId];
+        els.hostDetailTitle.textContent = `节点详情: ${escapeHtml(n.name || '?')}`;
+        const items = [
+          ['ID', n.id],
+          ['名称', n.name],
+          ['IP 地址', n.ip],
+          ['平台', n.platform],
+          ['协议版本', n.version],
+          ['最大任务数', n.max_jobs],
+          ['当前任务数', n.current_jobs || 0],
+          ['负载', `${n.current_jobs || 0}/${n.max_jobs || 0}`],
+          ['系统负载', n.load ? (n.load / 1000).toFixed(2) : '-'],
+          ['1分钟负载', n.load_avg_1 || '-'],
+          ['5分钟负载', n.load_avg_5 || '-'],
+          ['10分钟负载', n.load_avg_10 || '-'],
+          ['空闲内存', fmtBytes(n.free_mem)],
+          ['编译速度', n.speed ? n.speed.toFixed(2) : '-'],
+          ['特性', n.features || '-'],
+          ['禁止远程', n.no_remote ? '是' : '否'],
+          ['最后活跃', fmtTime(n.last_seen)],
+        ];
+        els.hostDetailGrid.innerHTML = items.map(([label, value]) => `
+          <div class="detail-item">
+            <div class="label">${escapeHtml(label)}</div>
+            <div class="value">${escapeHtml(String(value))}</div>
+          </div>
+        `).join('');
+      }
+
+      // Click handlers for host rows
+      document.querySelectorAll('tr[data-hostid]').forEach(row => {
+        row.addEventListener('click', () => {
+          selectedHostId = parseInt(row.dataset.hostid);
+          switchView('host', selectedHostId);
+        });
+      });
+    }
+
+    function scheduleRender(data) {
+      lastData = data;
+      if (renderPending) return;
+      const now = Date.now();
+      const elapsed = now - lastRender;
+      if (elapsed >= refreshIntervalMs) {
+        renderPending = true;
+        requestAnimationFrame(() => {
+          render(data);
+          lastRender = Date.now();
+          renderPending = false;
+        });
+      } else {
+        renderPending = true;
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            if (lastData) render(lastData);
+            lastRender = Date.now();
+            renderPending = false;
+          });
+        }, refreshIntervalMs - elapsed);
+      }
+    }
+
+    function connect() {
+      const es = new EventSource('/events');
+      es.onopen = () => setStatus(true, '已连接');
+      es.onerror = () => setStatus(false, '重连中…');
+      es.onmessage = (ev) => {
+        try {
+          scheduleRender(JSON.parse(ev.data));
+        } catch (e) {
+          console.error('Parse error', e);
+        }
+      };
+    }
+
+    // Load initial config
+    fetch('/api/config')
+      .then(r => r.json())
+      .then(cfg => {
+        if (cfg.refresh_interval) {
+          els.refreshSelect.value = String(cfg.refresh_interval);
+          refreshIntervalMs = cfg.refresh_interval * 1000;
+        }
+      })
+      .catch(() => {});
+
+    connect();
+  </script>
+</body>
+</html>
