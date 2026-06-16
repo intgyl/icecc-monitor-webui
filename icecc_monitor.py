@@ -261,6 +261,21 @@ class State:
         )
         self.nodes[hostid] = node
 
+    def prune_stale_nodes(self, max_age: float = 60.0) -> None:
+        """Remove nodes that have not sent stats for a while.
+
+        icecc daemons can reconnect with a different hostid; without pruning
+        the old entry stays visible as an offline duplicate forever.
+        """
+        now = time.time()
+        stale_ids = [
+            hostid
+            for hostid, node in self.nodes.items()
+            if now - node.get("last_seen", 0) > max_age
+        ]
+        for hostid in stale_ids:
+            del self.nodes[hostid]
+
     def snapshot(self) -> dict:
         return {
             "nodes": self.nodes,
@@ -475,6 +490,7 @@ async def config_handler(request: web.Request) -> web.Response:
 async def periodic_broadcast(server: MonitorServer) -> None:
     while True:
         await asyncio.sleep(server.refresh_interval)
+        server.state.prune_stale_nodes()
         await server.broadcast()
 
 
