@@ -52,4 +52,5 @@ python icecc_monitor.py --scheduler-host localhost --scheduler-port 8765 --host 
 | `--scheduler-port` | icecc scheduler 端口 | `8765` |
 | `--host` | HTTP 服务监听地址 | `0.0.0.0` |
 | `--port` | HTTP 服务端口 | `8080` |
+| `--protocol-version` | 握手时声明支持的最高协议版本 | 内置最新版本 |
 

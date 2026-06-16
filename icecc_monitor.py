@@ -23,7 +23,11 @@ from aiohttp import web
 # Protocol constants (from icecc services/comm.h)
 # ---------------------------------------------------------------------------
 
-PROTOCOL_VERSION = 42
+# Highest icecc monitor protocol version this client understands.
+# The scheduler may down-negotiate to an older version, but claiming the
+# current upstream value lets us connect to newer schedulers without
+# editing this constant after every icecc release.
+SUPPORTED_PROTOCOL_VERSION = 44
 MAX_MSG_SIZE = 10 * 1024 * 1024
 
 MSG_TYPES = {
@@ -63,8 +67,13 @@ def encode_string(s: str) -> bytes:
     return struct.pack(">I", len(encoded)) + encoded
 
 
-def parse_message(data: bytes) -> dict:
-    """Parse one complete framed message from the scheduler."""
+def parse_message(data: bytes) -> dict | None:
+    """Parse one complete framed message from the scheduler.
+
+    Returns ``None`` for message types that are known to exist in newer
+    protocol versions but are not handled by this monitor, so the caller
+    can skip them instead of dropping the connection.
+    """
     if len(data) < 8:
         raise ValueError("message too short")
     length = struct.unpack(">I", data[:4])[0]
@@ -74,7 +83,8 @@ def parse_message(data: bytes) -> dict:
     raw_type, rest = struct.unpack(">I", payload[:4])[0], payload[4:]
     msg_type = MSG_TYPES.get(raw_type)
     if msg_type is None:
-        raise ValueError(f"unknown message type {raw_type}")
+        logging.debug("Ignoring unknown scheduler message type %d", raw_type)
+        return None
 
     if msg_type == "stats":
         hostid = struct.unpack(">I", rest[:4])[0]
@@ -263,6 +273,16 @@ class State:
         }
 
 
+def _pack_version(version: int) -> bytes:
+    """Pack a protocol version the way icecc expects (little-endian 4 bytes)."""
+    return struct.pack("<I", version)
+
+
+def _unpack_version(data: bytes) -> int:
+    """Unpack a protocol version sent by icecc (little-endian 4 bytes)."""
+    return struct.unpack("<I", data)[0]
+
+
 # ---------------------------------------------------------------------------
 # Scheduler connector
 # ---------------------------------------------------------------------------
@@ -271,32 +291,59 @@ class State:
 class SchedulerConnector:
     """Persistent asyncio connection to icecc-scheduler."""
 
-    def __init__(self, host: str, port: int, state: State):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        state: State,
+        protocol_version: int = SUPPORTED_PROTOCOL_VERSION,
+    ):
         self.host = host
         self.port = port
         self.state = state
+        self.protocol_version = protocol_version
+        self.agreed_protocol_version: int | None = None
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
         self._closed = False
 
     async def connect(self) -> None:
         self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
-        # Icecc binary handshake (each side sends a 4-byte little-endian version):
-        # 1) client sends its protocol version.
-        # 2) server sends its initial version and expects an echo.
-        # 3) client echoes the server's version.
-        # 4) server sends the negotiated version.
-        # After that, normal framed messages begin.
-        self.writer.write(bytes([PROTOCOL_VERSION, 0, 0, 0]))
+
+        # Protocol negotiation (matches icecc MsgChannel handshake):
+        #   1. We send the maximum version we support.
+        #   2. Scheduler replies with the version it wants to use
+        #      (min of both sides).
+        #   3. We echo that agreed version back.
+        #   4. Scheduler confirms by echoing the agreed version again.
+        self.writer.write(_pack_version(self.protocol_version))
         await self.writer.drain()
-        server_version = await self.reader.readexactly(4)
-        self.writer.write(server_version)
+
+        server_version_data = await self.reader.readexactly(4)
+        server_version = _unpack_version(server_version_data)
+        agreed_version = min(self.protocol_version, server_version)
+
+        self.writer.write(_pack_version(agreed_version))
         await self.writer.drain()
-        await self.reader.readexactly(4)  # negotiated version, no reply needed
+
+        echoed_version_data = await self.reader.readexactly(4)
+        echoed_version = _unpack_version(echoed_version_data)
+        if echoed_version != agreed_version:
+            raise ConnectionError(
+                f"protocol negotiation failed: expected {agreed_version}, got {echoed_version}"
+            )
+
+        self.agreed_protocol_version = agreed_version
+        logging.info(
+            "Connected to scheduler %s:%d (protocol version %d)",
+            self.host,
+            self.port,
+            agreed_version,
+        )
+
         # MonLoginMsg: 4-byte big-endian length (value 4) + 4-byte big-endian type 'R'.
         self.writer.write(struct.pack(">II", 4, ord("R")))
         await self.writer.drain()
-        logging.info("Connected to scheduler %s:%d", self.host, self.port)
 
     async def run(self) -> None:
         backoff = 1
@@ -311,7 +358,8 @@ class SchedulerConnector:
                         raise ValueError(f"message too large: {length}")
                     payload = await self.reader.readexactly(length)
                     msg = parse_message(length_data + payload)
-                    self.state.update(msg)
+                    if msg is not None:
+                        self.state.update(msg)
             except (ConnectionError, asyncio.IncompleteReadError) as exc:
                 logging.warning("Scheduler connection lost: %s", exc)
             except Exception:
@@ -436,6 +484,15 @@ async def main() -> None:
     parser.add_argument("--scheduler-port", type=int, default=8765)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument(
+        "--protocol-version",
+        type=int,
+        default=SUPPORTED_PROTOCOL_VERSION,
+        help=(
+            "maximum icecc protocol version to advertise during handshake "
+            f"(default: {SUPPORTED_PROTOCOL_VERSION})"
+        ),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -443,7 +500,12 @@ async def main() -> None:
     )
 
     state = State()
-    connector = SchedulerConnector(args.scheduler_host, args.scheduler_port, state)
+    connector = SchedulerConnector(
+        args.scheduler_host,
+        args.scheduler_port,
+        state,
+        protocol_version=args.protocol_version,
+    )
     server = MonitorServer(state)
 
     app = web.Application()
